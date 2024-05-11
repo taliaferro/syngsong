@@ -18,6 +18,7 @@ if __name__ == '__main__':
     parser.add_argument("--mask", help="Hashcat style mask to append extra characters to the end of the passwords, Provide these in double quotes to keep your shell happy.", default="")
     parser.add_argument("--geniuskey", "-g", help="The Client Access Token from genius.com, you can also provide this with the envar GENIUSKEY")
     parser.add_argument("--topsongs", "-t", help="Pull x number of songs for an artist, based on popularity.", type=int, default=0)
+    parser.add_argument("--acronyms", "-a", help="Create acronyms from the first letter in each lyric.", action='store_true')
     parser.add_argument("--debug", "-d", help="Set logging to DEBUG level, INFO by default", action='store_true')
     args = parser.parse_args()
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO, format='%(asctime)s:%(levelname)s:%(message)s')
@@ -27,4 +28,4 @@ if __name__ == '__main__':
         sys.exit()
     else:
         genius_key = args.geniuskey if args.geniuskey is not None else os.getenv("GENIUSKEY")
-    core.generate_passwords(args.artist, genius_key, args.mask, min_len=args.minsize, max_len=args.maxsize, top_songs=args.topsongs)
+    core.generate_passwords(args.artist, genius_key, args.mask, min_len=args.minsize, max_len=args.maxsize, top_songs=args.topsongs, acronyms=args.acronyms)

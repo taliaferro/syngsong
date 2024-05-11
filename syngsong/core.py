@@ -1,9 +1,14 @@
 import logging
 import os
 import string
+import re
+from itertools import pairwise
+from functools import reduce
 
 import lyricsgenius
 
+# matches strings like [Verse 1], [Chorus] or [Pre-Chorus: Some Featured Artist]
+VERSE_BOUNDARY_REGEX=r"^\[[\w:-]+\]$"
 
 def basic_password_transform(password_set: set, min_len: int, max_len: int) -> set:
     """Basic password transformations. Add all lower, all upper, and title case
@@ -24,10 +29,25 @@ def basic_password_transform(password_set: set, min_len: int, max_len: int) -> s
             transformed_passwords.add(line.upper())
             transformed_passwords.add(line.title())
             if " " in line:
-                transformed_passwords.add(line.title().replace(" ", "")) #  This lets us get title cased passwords without spaces 
+                transformed_passwords.add(line.title().replace(" ", "")) #  This lets us get title cased passwords without spaces
     return transformed_passwords
 
-def generate_passwords(artist: str, genius_api_key:str, masking:str = "", min_len:int = 8, max_len:int = 32, top_songs=0) -> bool:
+
+def acronym_transform(password_set:set) -> set:
+    """ Creates a string from only the first letter of each token in each lyric
+    in the password set.
+
+    Args:
+        password_set (set): passwords to work on
+
+    Returns:
+        set: passwords spelled out as acronyms
+    """
+    make_acronym = lambda pw: reduce(lambda acr,tok:acr + tok[0], pw.split(), "")
+    return {make_acronym(pw) for pw in password_set}
+
+
+def generate_passwords(artist: str, genius_api_key:str, masking:str = "", min_len:int = 8, max_len:int = 32, top_songs=0, acronyms:bool=False) -> bool:
     """The core of Syngsong. This is where the passwords get created
 
     Args:
@@ -37,6 +57,7 @@ def generate_passwords(artist: str, genius_api_key:str, masking:str = "", min_le
         genius_api_key (str): genius.com Client access token
         min_len (int, optional): Minimum password length. Defaults to 8.
         max_len (int, optional): Maximum password length. Defaults to 32.
+        acronyms (bool, default False): Create acronyms by taking the first letter of each lyric.
 
     Returns:
         bool: Return True right now, might do something else later, but this value shouldn't be used anywhere else.
@@ -53,19 +74,24 @@ def generate_passwords(artist: str, genius_api_key:str, masking:str = "", min_le
         passwords = set()
         # Try to split song lyrics into individual lines
         try:
-            raw_lyrics = song.lyrics.splitlines()
-            raw_lyrics.append(raw_lyrics[0].split("Lyrics")[-1])
+            raw_lyrics = song.lyrics.split("Lyrics", maxsplit=1)[-1]
+            raw_lines = re.sub(VERSE_BOUNDARY_REGEX, "", raw_lyrics, flags=re.MULTILINE).splitlines()
         except:
             logging.info(f"Unable to parse lyrics for {song.title}. It might not have any.")
             continue
         # Setting up some basic sets to build on later
-        base_password_lyrics = set([_.translate(str.maketrans('', '', string.punctuation)).strip() for _ in raw_lyrics if not _ == ""])
+        base_password_lyrics = set([_.translate(str.maketrans('', '', string.punctuation)).strip() for _ in raw_lines if not _ == ""])
         base_password_no_space = set([_.replace(" ", "") for _ in base_password_lyrics.copy()])
         base_password_lyrics.add(song.title)
         base_password_no_space.add(song.title.replace(" ", ""))
         # Time to do some basic transformation on the base sets of passwords
         passwords.update(basic_password_transform(base_password_lyrics, min_len, max_len))
         passwords.update(basic_password_transform(base_password_no_space, min_len, max_len))
+        if acronyms:
+            verses = set(re.split(VERSE_BOUNDARY_REGEX, raw_lyrics, flags=re.MULTILINE))
+            couplets = set(map(" ".join, pairwise(base_password_lyrics)))
+            base_password_acronyms = acronym_transform(verses | couplets)
+            passwords.update(basic_password_transform(base_password_acronyms, min_len, max_len))
         if len(masking) > 0:
             logging.info("Found a mask, working on that now")
             raw_mask = masking.lstrip("?").split("?")
@@ -93,7 +119,7 @@ def handle_mask(working_password_set: set, mask: list) -> set:
     This is a recursive function, it will recurse until there is no more mask characters to process.
 
     Args:
-        working_password_set (set): Password set to 
+        working_password_set (set): Password set to
         mask (list): I chop up the mask into a list in the calling function to make the mask easier to handle
 
     Returns:
