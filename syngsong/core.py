@@ -8,7 +8,7 @@ from functools import reduce
 import lyricsgenius
 
 # matches strings like [Verse 1], [Chorus] or [Pre-Chorus: Some Featured Artist]
-VERSE_BOUNDARY_REGEX=r"^\[[\w:-]+\]$"
+VERSE_BOUNDARY_REGEX=r"^\[[\w\s:-]+\]$"
 
 def basic_password_transform(password_set: set, min_len: int, max_len: int) -> set:
     """Basic password transformations. Add all lower, all upper, and title case
